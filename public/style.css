@@ -1,0 +1,14 @@
+#show-sub-folders{
+    height: 400px;
+    overflow-y: scroll;
+
+}
+
+#path {
+    height: 7em;
+}
+
+:not(.open) > pre::before {
+    content: '+ ';
+}
+

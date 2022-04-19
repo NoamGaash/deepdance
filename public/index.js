@@ -9,9 +9,6 @@ async function listDirectory(path) {
       },
       body: JSON.stringify({path})
     }).then(res => res.json())
-    //   .then(res => document.querySelector('#show-sub-folders').innerHTML = res
-    //     .map(res =>`<li>${res}</li>`)
-    //   );
 }
 
 async function createDirectoryContentList(path, UlElement) {
@@ -22,10 +19,9 @@ async function createDirectoryContentList(path, UlElement) {
         elem.innerHTML = `<pre>${file}</pre>`;
         const innerUL = document.createElement('ul');
         elem.appendChild(innerUL);
-        let open = false;
         elem.querySelector('pre').addEventListener('click', () => {
-            open = !open;
-            if(open)
+            elem.classList.toggle("open")
+            if(elem.classList.contains("open"))
                 createDirectoryContentList(`${path}/${file}`, innerUL);
             else
                 innerUL.innerHTML='';
