@@ -6,8 +6,13 @@ const fs = require('fs')
 function getDirContent(dirpath) {
 	console.log(fs.readdirSync(dirpath, {withFileTypes: true}).map(item => item.name))
 	return fs.readdirSync(dirpath, {withFileTypes: true})
-	//.filter(item => !item.isDirectory())
 	.map(item => item.name)
+}
+
+function getFirstFile(path) {
+	if(fs.statSync(path).isDirectory())
+		return getFirstFile(path + "/" + fs.readdirSync(path)[0])
+	else return path;
 }
 
 
@@ -24,8 +29,20 @@ app.get('/', (req, res) => {
 });
 
 app.post('/checkDB', (req, res) => {
-	console.log(req.body)
 	res.send(getDirContent(req.body.path));
+})
+app.post('/getFirstFile', (req, res) => {
+	const result = {file: getFirstFile(req.body.path)}
+	console.log(result)
+	res.send(result);
+})
+
+
+
+app.use((req, res, next) => {
+	if(req.path.endsWith('.png'))
+		res.sendFile(decodeURI(req.path))
+	else next();
 })
 
 app.listen(PORT, () => console.log(`Server listening on port: ${PORT}`));
