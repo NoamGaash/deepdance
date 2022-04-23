@@ -45,4 +45,36 @@ app.use((req, res, next) => {
 	else next();
 })
 
+
+
+var amqp = require('amqplib/callback_api');
+
+amqp.connect('amqp://localhost', function(error0, connection) {
+  if (error0) {
+    throw error0;
+  }
+  connection.createChannel(function(error1, channel) {
+    if (error1) {
+      throw error1;
+    }
+    var queue = 'userCreatedTasks';
+
+    channel.assertQueue(queue, {
+      durable: false
+    });
+
+
+	app.post('/submit', (req, res) => {
+		const msg = JSON.stringify(req.body);
+		channel.sendToQueue(queue, Buffer.from(msg));
+    	console.log(" [x] Sent %s", msg);
+		res.send('ok');
+	})
+    
+  });
+});
+
+
+
+
 app.listen(PORT, () => console.log(`Server listening on port: ${PORT}`));

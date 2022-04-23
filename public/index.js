@@ -53,7 +53,11 @@ async function createDirectoryContentList(path, UlElement) {
 }
 
 function submitURL() {
-    console.log(1);
+    postJSON('/submit', {
+        dimentions: document.querySelector(".dimentions").value,
+        iuv: document.querySelector("#iuv .path").value,
+        rgb: document.querySelector("#rgb .path").value
+    })
 }
 
 async function onPathUpdate () {
