@@ -1,7 +1,7 @@
 const walkSync = require('walk-sync');
 const { copyFileSync, mkdirSync, cpSync } = require('fs')
 const { v4: uuidv4 } = require('uuid');
-var path = require('path');
+import * as path from 'path';
 import { MongoClient } from "mongodb"
 import * as amqplib from 'amqplib'
 
@@ -52,12 +52,12 @@ Number.prototype.pad = String.prototype.pad =  function(size: number) {
     var dbo = db.db("mydb");
     return {
         flattenDatasets: dbo.collection<flatten_directory>("flatten-datasets"),
-        preparedDatasets: dbo.collection<dataset>("prepared-datasets")
+        preparedDatasets: dbo.collection("prepared-datasets")
     }
     });
 
     /*********** MQ **************/
-    let rammitMQChannel = await amqplib.connect('amqp://localhost').then(conn=> conn.createChannel());
+    let rabbitMQChannel = await amqplib.connect('amqp://localhost').then(conn=> conn.createChannel());
 
     /*********** directory flattening *****************/
 
@@ -92,12 +92,12 @@ Number.prototype.pad = String.prototype.pad =  function(size: number) {
 
     /************ user tasks handling *************/
 
-    rammitMQChannel.assertQueue('userCreatedTasks', {durable: false});
-    rammitMQChannel.consume('userCreatedTasks', msg => {
+    rabbitMQChannel.assertQueue('userCreatedTasks', {durable: false});
+    rabbitMQChannel.consume('userCreatedTasks', msg => {
         if(!msg) return;
         const task: task = JSON.parse(msg.content.toString());
         handleUserTask(task);
-        rammitMQChannel.ack(msg)
+        rabbitMQChannel.ack(msg)
     }, {});
 
     async function handleUserTask(task: task) {
@@ -105,13 +105,17 @@ Number.prototype.pad = String.prototype.pad =  function(size: number) {
             const flat_iuv = await verifyFlattenDirectory(task.iuv);
             const flat_rgb = await verifyFlattenDirectory(task.rgb);
             console.log('finished', {flat_iuv, flat_rgb, task})
-            make_db(flat_iuv, flat_rgb);
+            const dataset_dir = await make_db(flat_iuv, flat_rgb);
+            rabbitMQChannel.sendToQueue('datasets to train', Buffer.from(dataset_dir))
         }else if (task.dimentions == 2) {
             const iuvPaths = walkSync(task.iuv, { globs: ['*/*/'], includeBasePath: true });
             const flat_iuvs = await Promise.all(iuvPaths.map(verifyFlattenDirectory));
             const rgbPaths = walkSync(task.rgb, { globs: ['*/'], includeBasePath: true });
             const flat_rgbs = await Promise.all(rgbPaths.map(verifyFlattenDirectory));
-            flat_iuvs.forEach((iuv, ind) => make_db(iuv, flat_rgbs[ind % flat_rgbs.length]));
+            const dataset_dirs = await Promise.all(flat_iuvs.map((iuv, ind) => make_db(iuv, flat_rgbs[ind % flat_rgbs.length])));
+            dataset_dirs.forEach(
+                dir => rabbitMQChannel.sendToQueue('datasets to train', Buffer.from(dir))
+            )
             console.log('finished', {rgbPaths, iuvPaths, task});
         }
     }
@@ -124,6 +128,7 @@ Number.prototype.pad = String.prototype.pad =  function(size: number) {
 
         if(!target_dir) {
             target_dir = `${FLAT_DIRS_LOCATION}/datasets/${uuidv4()}/`;
+            console.log("create dir for flatten dataset: ", target_dir, )
             mkdirSync(target_dir, {recursive:true});
             cpSync(driving_frames_dir.flatten, `${target_dir}/train_label`, {recursive:true});
             cpSync(real_frames_dir.flatten, `${target_dir}/train_img`, {recursive:true});
@@ -138,7 +143,7 @@ Number.prototype.pad = String.prototype.pad =  function(size: number) {
             });
         }
 
-        return [target_dir];
+        return target_dir;
     }
 
 
