@@ -70,3 +70,120 @@ async function onPathUpdate () {
 
 $('.path').keyup(onPathUpdate)
 $('.path').keyup()
+
+// get list of datasets and UL element and generate list items
+function createDatasetList(datasets, ul) {
+    datasets.map(dataset => {
+        const li = document.createElement("li");
+        li.innerHTML = `
+        <ul>
+            ${dataset._id}
+            <li>files: ${dataset.dir_path}</li>
+            <li>trained: ${dataset.checkpoints}</li>
+        `;
+        if(dataset.checkpoints?.length > 0) { // dataset was globally trained
+            li.innerHTML += `
+            <li>
+                global:
+                <img src="${dataset.dir_path}/checkpoints/model_global/web/images/epoch006_synthesized_image.png"/>
+            </li>`;
+        }
+        if(dataset.checkpoints?.length > 1) { // dataset was locally trained
+            li.innerHTML += `
+            <li>
+                local:
+                <img src="${dataset.dir_path}/checkpoints/model_local/web/images/epoch006_synthesized_image.png"/>
+            </li>`;
+        }
+        li.innerHTML += `</ul>`;
+        return li;
+    }).forEach(element => {
+        ul.appendChild(element)
+    });
+}
+
+
+/********* list directories and DBs *********/
+const uppdateDirsAndDbs = ()=>{
+    fetch('tasksStatus').then(res => res.json()).then((res) => { // res: {preparedDatasets: any, flattenDatasets: any}
+
+        // update flatten directories
+
+        const flattenDatasetsUL = document.querySelector('#flatten-directories ul');
+        flattenDatasetsUL.innerHTML = ""; // clear the list of flatten datasets
+        69+res.flattenDatasets.forEach(directory => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+            ${directory.original.substring(directory.original.indexOf('/T'))}
+            <ul>
+                <li>files: ${directory.files}</li>
+                <li>original: ${directory.original}</li>
+                <li>flatten: ${directory.flatten}</li>
+            </ul>`;
+            flattenDatasetsUL.appendChild(li);
+        });
+        
+        document.querySelector("#flatten-directories h2").innerHTML = `flatten directories (${res.flattenDatasets.length})`;
+
+        // update untrained datasets
+
+        const preparedDatasetsUL = document.querySelector('#prepared-datasets-initial ul');
+        preparedDatasetsUL.innerHTML = ""; // clear the list of prepared datasets
+
+        const pretrainedDatasets = res.preparedDatasets.filter(directory => directory.checkpoints?.length === 0);
+
+        pretrainedDatasets.forEach(directory => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+            <ul>
+                ${directory._id}
+                <li>files: ${directory.dir_path}</li>
+                <li>trained: ${directory.checkpoints}</li>
+            </ul>`;
+            preparedDatasetsUL.appendChild(li);
+        });
+
+        document.querySelector("#prepared-datasets-initial h2").innerHTML = `prepared datasets (${pretrainedDatasets.length})`;
+
+        // update globally trained datasets
+        const preparedDatasetsGloballyTrainedUL = document.querySelector('#prepared-datasets-globally-trained ul');
+        preparedDatasetsGloballyTrainedUL.innerHTML = ""; // clear the list of prepared datasets
+
+        const pretrainedDatasetsGloballyTrained = res.preparedDatasets.filter(directory => directory.checkpoints?.length === 1);
+
+        createDatasetList(pretrainedDatasetsGloballyTrained, preparedDatasetsGloballyTrainedUL)
+
+        document.querySelector("#prepared-datasets-globally-trained h2").innerHTML = `prepared datasets (${pretrainedDatasetsGloballyTrained.length})`;
+
+        // update locally trained datasets
+        const preparedDatasetsLocallyTrainedUL = document.querySelector('#prepared-datasets-locally-trained ul');
+        preparedDatasetsLocallyTrainedUL.innerHTML = ""; // clear the list of prepared datasets
+        
+        const locallyTrainedDatasets = res.preparedDatasets.filter(directory => directory.checkpoints?.length === 2);
+
+        locallyTrainedDatasets.forEach(directory => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+            <ul>
+                ${directory._id}
+                <li>files: ${directory.dir_path}</li>
+                <li>trained: ${directory.checkpoints}</li>
+                <li>
+                    global:
+                    <img src="${directory.dir_path}/checkpoints/model_global/web/images/epoch006_synthesized_image.png"/>
+                </li>
+                <li>
+                    local:
+                    <img src="${directory.dir_path}/checkpoints/model_local/web/images/epoch006_synthesized_image.png"/>
+                </li>
+            </ul>`;
+            preparedDatasetsLocallyTrainedUL.appendChild(li);
+        });
+
+        document.querySelector("#prepared-datasets-locally-trained h2").innerHTML = `prepared datasets (locally trained) (${locallyTrainedDatasets.length})`;
+
+    });
+}
+
+uppdateDirsAndDbs()
+setInterval(uppdateDirsAndDbs, 5000)

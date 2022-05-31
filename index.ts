@@ -1,6 +1,7 @@
 import * as fs from 'fs';;
 import * as express from "express";
 import * as amqp from 'amqplib';
+import { MongoClient } from 'mongodb'
 
 (async ()=>{
 	/********* file system utilities *********/
@@ -10,11 +11,21 @@ import * as amqp from 'amqplib';
 		.map(item => item.name)
 	}
 
-	function getFirstFile(path: string) {
+	function getFirstFile(path: string) : string{
 		if(fs.statSync(path).isDirectory())
 			return getFirstFile(path + "/" + fs.readdirSync(path)[0])
 		else return path;
 	}
+
+	const url = "mongodb://localhost:27017/DeepDance";
+    
+    let {preparedDatasets, flattenDatasets} = await MongoClient.connect(url).then(db => {
+        var dbo = db.db("mydb");
+        return {
+            preparedDatasets: dbo.collection("prepared-datasets"),
+            flattenDatasets: dbo.collection("flatten-datasets")
+        }
+    });
 
 	/********** web server ************/
 	const app = express.default();
@@ -24,7 +35,7 @@ import * as amqp from 'amqplib';
 	app.use(express.json());
 
 	app.get('/', (req, res) => {
-		res.send('Hello World!');
+		res.send('Hello Noam!');
 	});
 
 	app.post('/checkDB', (req, res) => {
@@ -57,6 +68,13 @@ import * as amqp from 'amqplib';
 		console.log(" [x] Sent %s", msg);
 		res.send('ok');
 	})
+
+	app.get('/tasksStatus', async (req, res) => {
+		res.send({
+			preparedDatasets: await preparedDatasets.find().toArray(),
+			flattenDatasets: await flattenDatasets.find().toArray()
+		})
+	});
 
 	app.listen(PORT, () => console.log(`Server listening on port: ${PORT}`));
 })()
