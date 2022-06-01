@@ -62,25 +62,32 @@ function validateFaceExists(dataset: string): Promise<void> {
 
     /************ get datasets to train ***********************/
     let rabbitMQChannel = await amqplib.connect('amqp://localhost').then(conn=> conn.createChannel());
-    rabbitMQChannel.prefetch(1); // can train only two models at a time
+    const gpus = [0,1];
+    rabbitMQChannel.prefetch(2); // can train only two models at a time
     rabbitMQChannel.consume("datasets to train", async msg => {
         if(!msg) throw "empty message";
         const dir_path = msg.content.toString();
         let dataset = await preparedDatasets.findOne({dir_path});
+        const gpu = gpus.pop() || 1;
         try  {
             if(!dataset?.checkpoints) {
                 const output: string[] =  await new Promise((resolve, reject) => {
-                    console.log('training global model for ', dir_path)
+                    console.log(`training global model on gpu #${gpu} for ${dir_path}`)
                     PythonShell.run('train_fullts.py', {
                         ...pythonOptions,
                         args: [
                             ...pythonOptions.args,
                             "--dataroot", dir_path,
                             "--checkpoints_dir", path.join(dir_path, "checkpoints")
-                        ]
+                        ],
+                        env: {
+                            "CUDA_VISIBLE_DEVICES": `${gpu}`
+                        }
                     }, (err, out) => {
                         if(err) reject(err);
                         else resolve(out || ["no output"]);
+                    }).on('message', (message) => {
+                        console.log(message);
                     })
                 });
                 await preparedDatasets.updateOne(
@@ -89,49 +96,60 @@ function validateFaceExists(dataset: string): Promise<void> {
                 )
                 console.log(output.join('\n'));
             }
+            rabbitMQChannel.sendToQueue("datasets to local train (second phase)", Buffer.from(dir_path));
+            rabbitMQChannel.ack(msg)
         } catch(e) {
             console.log(e);
             rabbitMQChannel.nack(msg);      
         }
-        rabbitMQChannel.sendToQueue("datasets to local train (second phase)", Buffer.from(dir_path));
-        rabbitMQChannel.ack(msg)
+        gpus.push(gpu);
     }, {noAck: false})
 
     rabbitMQChannel.consume("datasets to local train (second phase)", async msg => {
         if(!msg) throw "empty message";
         const dir_path = msg?.content.toString();
         let dataset = await preparedDatasets.findOne({dir_path});
-        if(dataset?.checkpoints?.indexOf('local') < 0 || !await pathExists(path.join(dir_path, "checkpoints", "model_local"))) {
-            const output =  await new Promise((resolve, reject) => {
-                console.log('training local ', dir_path)
-                PythonShell.run('train_fullts.py', {
-                    ...pythonOptions,
-                    args: [
-                        "--name", "model_local",
-                        ...pythonOptions.args,
-                        "--dataroot", dir_path,
-                        "--checkpoints_dir", path.join(dir_path, "checkpoints"),
-                        "--load_pretrain", path.join(dir_path, "checkpoints", "model_global"),
-                        "--netG", "local",
-                        "--ngf", "32",
-                        "--num_D", "3",
-                        "--ngf", "32"
-                    ]
-                }, (err, out) => {
-                    if(err) reject(err);
-                    else resolve(out);
-                })
-            });
-            await preparedDatasets.updateOne(
-                { dir_path },
-                { $set: { checkpoints: ['global', 'local'] } }
-            )
-            console.log(output);
-        } else {
-            console.log('already trained local: ', dir_path, dataset?.checkpoints)
+        const gpu = gpus.pop() ?? 1;
+        try  {
+            if(dataset?.checkpoints?.indexOf('local') < 0 || !await pathExists(path.join(dir_path, "checkpoints", "model_local"))) {
+                const output =  await new Promise((resolve, reject) => {
+                    console.log(`training local model on gpu #${gpu} for ${dir_path}`)
+                    PythonShell.run('train_fullts.py', {
+                        ...pythonOptions,
+                        args: [
+                            "--name", "model_local",
+                            ...pythonOptions.args,
+                            "--dataroot", dir_path,
+                            "--checkpoints_dir", path.join(dir_path, "checkpoints"),
+                            "--load_pretrain", path.join(dir_path, "checkpoints", "model_global"),
+                            "--netG", "local",
+                            "--ngf", "32",
+                            "--num_D", "3",
+                            "--ngf", "32"
+                        ],
+                        env: {
+                            "CUDA_VISIBLE_DEVICES": `${gpu}`
+                        }
+                    }, (err, out) => {
+                        if(err) reject(err);
+                        else resolve(out);
+                    })
+                });
+                await preparedDatasets.updateOne(
+                    { dir_path },
+                    { $set: { checkpoints: ['global', 'local'] } }
+                )
+                console.log(output);
+            } else {
+                console.log('already trained local: ', dir_path, dataset?.checkpoints)
+            }
+            rabbitMQChannel.sendToQueue("datasets to face train (third phase)", Buffer.from(dir_path));
+            rabbitMQChannel.ack(msg)
+        } catch(e) {
+            console.log(e);
+            rabbitMQChannel.nack(msg);      
         }
-        rabbitMQChannel.sendToQueue("datasets to face train (third phase)", Buffer.from(dir_path));
-        rabbitMQChannel.ack(msg)
+        gpus.push(gpu);
     }, {noAck: false})
 
 
