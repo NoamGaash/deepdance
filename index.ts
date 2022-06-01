@@ -27,6 +27,22 @@ import { MongoClient } from 'mongodb'
         }
     });
 
+
+	/********* validate DB ***********************/
+	setInterval(()=>{	
+		preparedDatasets.find({}).toArray((err, res)=>{
+			if(err) throw err;
+			res?.forEach(item => {
+				const hasGlobal = fs.existsSync(item.dir_path + "/checkpoints/model_global/web/images/epoch006_synthesized_image.png");
+				const hasLocal = fs.existsSync(item.dir_path + "/checkpoints/model_local/web/images/epoch006_synthesized_image.png");
+				const checkpoints = [];
+				if(hasGlobal) checkpoints.push('global');
+				if(hasLocal) checkpoints.push('local');
+				preparedDatasets.updateOne({dir_path: item.dir_path}, {$set: {checkpoints: checkpoints}});
+			});
+		});
+	}, 10000);
+
 	/********** web server ************/
 	const app = express.default();
 	const PORT = 3000;
