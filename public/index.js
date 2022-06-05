@@ -153,7 +153,7 @@ const uppdateDirsAndDbs = ()=>{
 
         createDatasetList(pretrainedDatasetsGloballyTrained, preparedDatasetsGloballyTrainedUL)
 
-        document.querySelector("#prepared-datasets-globally-trained h2").innerHTML = `prepared datasets (${pretrainedDatasetsGloballyTrained.length})`;
+        document.querySelector("#prepared-datasets-globally-trained h2").innerHTML = `prepared datasets (globally trained) (${pretrainedDatasetsGloballyTrained.length})`;
 
         // update locally trained datasets
         const preparedDatasetsLocallyTrainedUL = document.querySelector('#prepared-datasets-locally-trained ul');
